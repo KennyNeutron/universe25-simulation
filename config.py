@@ -28,3 +28,9 @@ EAT_DISTANCE = 10.0           # proximity required to consume food
 BACKGROUND_COLOR = (15, 15, 25)
 AGENT_COLOR = (100, 200, 255)
 FOOD_COLOR = (100, 220, 80)
+
+# Sprites
+MOUSE_SPRITE_PATH = "assets/mouse.png"
+FOOD_SPRITE_PATH = "assets/food.png"
+MOUSE_SPRITE_SIZE = (16, 16)
+FOOD_SPRITE_SIZE = (10, 10)
