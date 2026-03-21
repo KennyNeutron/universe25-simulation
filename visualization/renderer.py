@@ -9,6 +9,9 @@ from config import (
     BACKGROUND_COLOR,
     MOUSE_SPRITE_SIZE,
     FOOD_SPRITE_SIZE,
+    FEEDING_ZONE_COLOR,
+    NESTING_ZONE_COLOR,
+    BIRTH_FLASH_RADIUS,
 )
 
 
@@ -63,6 +66,30 @@ def _create_food_sprite(size: tuple[int, int]) -> pygame.Surface:
     return surf
 
 
+def _stress_tint(ratio: float) -> tuple[int, int, int]:
+    """Return an RGB tint color based on stress ratio (0–1).
+
+    Low  → white (no tint)   (1.0, 1.0, 1.0)
+    Mid  → yellow            (1.0, 1.0, 0.4)
+    High → red               (1.0, 0.3, 0.3)
+    """
+    if ratio <= 0.0:
+        return (255, 255, 255)
+
+    if ratio <= 0.5:
+        # White → Yellow
+        t = ratio / 0.5
+        g = 255
+        b = int(255 * (1.0 - 0.6 * t))  # 255 → 102
+        return (255, g, b)
+    else:
+        # Yellow → Red
+        t = (ratio - 0.5) / 0.5
+        g = int(255 * (1.0 - 0.7 * t))   # 255 → 77
+        b = int(102 * (1.0 - 0.7 * t))   # 102 → 31
+        return (255, g, b)
+
+
 class Renderer:
     """Handles all Pygame drawing for the simulation using sprite images."""
 
@@ -79,14 +106,18 @@ class Renderer:
         self._food_half_w = FOOD_SPRITE_SIZE[0] // 2
         self._food_half_h = FOOD_SPRITE_SIZE[1] // 2
 
-    def render(self, agents, foods) -> None:
+    def render(self, agents, foods, world) -> None:
         """Draw the current frame.
 
         Args:
             agents: Iterable of Agent objects to draw.
             foods: Iterable of Food objects to draw.
+            world: World object containing zone definitions.
         """
         self.screen.fill(BACKGROUND_COLOR)
+
+        # Draw zone overlays
+        self._draw_zones(world)
 
         # Draw food first (underneath agents)
         for food in foods:
@@ -96,14 +127,52 @@ class Renderer:
                  int(food.y) - self._food_half_h),
             )
 
-        # Draw agents on top, rotated to face movement direction
+        # Draw agents on top, rotated and tinted by stress
         for agent in agents:
+            # Birth flash indicator
+            if agent.birth_flash > 0:
+                flash_alpha = int(200 * (agent.birth_flash / 0.3))
+                flash_surf = pygame.Surface(
+                    (BIRTH_FLASH_RADIUS * 2, BIRTH_FLASH_RADIUS * 2), pygame.SRCALPHA
+                )
+                pygame.draw.circle(
+                    flash_surf, (255, 255, 255, flash_alpha),
+                    (BIRTH_FLASH_RADIUS, BIRTH_FLASH_RADIUS), BIRTH_FLASH_RADIUS,
+                )
+                self.screen.blit(
+                    flash_surf,
+                    (int(agent.x) - BIRTH_FLASH_RADIUS,
+                     int(agent.y) - BIRTH_FLASH_RADIUS),
+                )
+
             angle = math.degrees(math.atan2(-agent.vy, agent.vx))
             rotated = pygame.transform.rotate(self.mouse_sprite, angle)
-            rect = rotated.get_rect(center=(int(agent.x), int(agent.y)))
-            self.screen.blit(rotated, rect)
+
+            # Apply stress tint
+            tint = _stress_tint(agent.stress_ratio)
+            tinted = rotated.copy()
+            tint_overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
+            tint_overlay.fill((*tint, 255))
+            tinted.blit(tint_overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+            rect = tinted.get_rect(center=(int(agent.x), int(agent.y)))
+            self.screen.blit(tinted, rect)
 
         pygame.display.flip()
+
+    def _draw_zones(self, world) -> None:
+        """Draw semi-transparent overlays for each zone."""
+        zone_colors = {
+            "feeding": FEEDING_ZONE_COLOR,
+            "nesting": NESTING_ZONE_COLOR,
+        }
+        for zone in world.zones:
+            color = zone_colors.get(zone.zone_type)
+            if color is None:
+                continue
+            overlay = pygame.Surface((zone.width, zone.height), pygame.SRCALPHA)
+            overlay.fill((*color, 100))  # semi-transparent
+            self.screen.blit(overlay, (zone.x, zone.y))
 
     def close(self) -> None:
         """Shut down the Pygame display."""
