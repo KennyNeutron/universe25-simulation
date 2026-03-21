@@ -28,11 +28,18 @@ from config import (
     REPRODUCTION_HUNGER_MAX,
     CHILD_SPEED_VARIATION,
     BIRTH_FLASH_DURATION,
+    AGENT_LIFESPAN,
+    LIFESPAN_VARIATION,
+    STARVATION_THRESHOLD,
+    BEHAVIORAL_SINK_THRESHOLD,
+    SINK_SEEK_CHANCE,
+    SINK_SPEED_PENALTY,
+    STRESS_RECOVERY_DELAY,
 )
 
 
 class Agent:
-    """A single autonomous agent with hunger, stress, reproduction, and degradation."""
+    """A single autonomous agent with hunger, stress, reproduction, death, and degradation."""
 
     def __init__(self, x: float = None, y: float = None, max_speed: float = None):
         # Position
@@ -54,12 +61,19 @@ class Agent:
         # Stress state
         self.stress = 0.0
         self.neighbor_count = 0  # set externally by Simulation
+        self.stress_recovery_timer = 0.0  # time since last neighbor interaction
 
         # Identity & reproduction
         self.gender = random.choice(["male", "female"])
         self.age = 0.0
-        self.reproduction_cooldown = REPRODUCTION_COOLDOWN * 0.5  # stagger initial readiness
-        self.birth_flash = 0.0  # countdown for visual birth indicator
+        self.lifespan = AGENT_LIFESPAN * random.uniform(
+            1.0 - LIFESPAN_VARIATION, 1.0 + LIFESPAN_VARIATION
+        )
+        self.reproduction_cooldown = REPRODUCTION_COOLDOWN * 0.5
+        self.birth_flash = 0.0
+
+        # Death
+        self.alive = True
 
     @property
     def stress_ratio(self) -> float:
@@ -67,10 +81,16 @@ class Agent:
         return self.stress / MAX_STRESS
 
     @property
+    def is_dead(self) -> bool:
+        """Check if this agent should die this frame."""
+        return self.hunger >= STARVATION_THRESHOLD or self.age >= self.lifespan
+
+    @property
     def can_reproduce(self) -> bool:
         """Check if this agent is eligible to reproduce right now."""
         return (
-            self.reproduction_cooldown <= 0
+            self.alive
+            and self.reproduction_cooldown <= 0
             and self.stress < REPRODUCTION_STRESS_MAX
             and self.hunger < REPRODUCTION_HUNGER_MAX
         )
@@ -78,17 +98,15 @@ class Agent:
     @classmethod
     def create_child(cls, parent_a: "Agent", parent_b: "Agent") -> "Agent":
         """Spawn a child near the midpoint of two parents with inherited traits."""
-        # Position — midpoint + small offset
         mx = (parent_a.x + parent_b.x) / 2 + random.uniform(-10, 10)
         my = (parent_a.y + parent_b.y) / 2 + random.uniform(-10, 10)
         mx = max(AGENT_RADIUS, min(mx, WINDOW_WIDTH - AGENT_RADIUS))
         my = max(AGENT_RADIUS, min(my, WINDOW_HEIGHT - AGENT_RADIUS))
 
-        # Speed — average of parents ± variation
         avg_speed = (parent_a.max_speed + parent_b.max_speed) / 2
         variation = avg_speed * CHILD_SPEED_VARIATION
         child_speed = avg_speed + random.uniform(-variation, variation)
-        child_speed = max(child_speed, MAX_SPEED * 0.5)  # floor
+        child_speed = max(child_speed, MAX_SPEED * 0.5)
 
         child = cls(x=mx, y=my, max_speed=child_speed)
         child.hunger = 0.0
@@ -97,33 +115,36 @@ class Agent:
         child.reproduction_cooldown = REPRODUCTION_COOLDOWN
         child.birth_flash = BIRTH_FLASH_DURATION
 
-        # Apply cooldown to parents
         parent_a.reproduction_cooldown = REPRODUCTION_COOLDOWN
         parent_b.reproduction_cooldown = REPRODUCTION_COOLDOWN
 
         return child
 
     def update(self, dt: float, foods: list) -> None:
-        """Advance the agent by one time-step.
-
-        Args:
-            dt: Delta time in seconds since the last frame.
-            foods: List of available Food objects in the simulation.
-        """
+        """Advance the agent by one time-step."""
         # ── Timers ────────────────────────────────────────────────────────
         self.age += dt
         self.reproduction_cooldown = max(0.0, self.reproduction_cooldown - dt)
         self.birth_flash = max(0.0, self.birth_flash - dt)
 
-        # ── Stress accumulation / decay ───────────────────────────────────
+        # ── Stress accumulation / recovery ────────────────────────────────
         self.stress += self.neighbor_count * STRESS_PER_NEIGHBOR * dt
-        self.stress -= STRESS_DECAY_RATE * dt
+
+        # Stress recovery delay: only decay after sustained isolation
+        if self.neighbor_count == 0:
+            self.stress_recovery_timer += dt
+        else:
+            self.stress_recovery_timer = 0.0
+
+        if self.stress_recovery_timer >= STRESS_RECOVERY_DELAY:
+            self.stress -= STRESS_DECAY_RATE * dt
+
         self.stress = max(0.0, min(self.stress, MAX_STRESS))
 
         # ── Hunger ────────────────────────────────────────────────────────
         self.hunger = min(self.hunger + HUNGER_RATE * dt, MAX_HUNGER)
 
-        # ── Behavior (3-tier stress degradation) ──────────────────────────
+        # ── Behavior (4-tier stress degradation) ──────────────────────────
         self._behave(dt, foods)
 
         self._clamp_speed()
@@ -131,14 +152,7 @@ class Agent:
         self._bounce()
 
     def try_eat(self, foods: list):
-        """Check if the agent is close enough to eat any food.
-
-        Args:
-            foods: List of available Food objects.
-
-        Returns:
-            The Food object that was eaten, or None.
-        """
+        """Check if the agent is close enough to eat any food."""
         eat_dist_sq = EAT_DISTANCE * EAT_DISTANCE
         for food in foods:
             dx = food.x - self.x
@@ -151,10 +165,23 @@ class Agent:
     # ── Private helpers ───────────────────────────────────────────────────
 
     def _behave(self, dt: float, foods: list) -> None:
-        """Decide movement behavior based on hunger and stress level."""
+        """Decide movement behavior based on hunger and stress level (4 tiers)."""
         wants_food = self.hunger >= HUNGER_THRESHOLD and foods
 
-        if self.stress >= STRESS_THRESHOLD_HIGH:
+        if self.stress >= BEHAVIORAL_SINK_THRESHOLD:
+            # BEHAVIORAL SINK: agent nearly non-functional
+            if wants_food and random.random() < SINK_SEEK_CHANCE:
+                target = self._find_nearest(foods)
+                if target is not None:
+                    self._seek(target, dt, STRESS_SEEK_PENALTY_HIGH)
+                else:
+                    self._wander(dt)
+            else:
+                self._wander(dt)
+            self._apply_jitter(dt, STRESS_JITTER_HIGH)
+
+        elif self.stress >= STRESS_THRESHOLD_HIGH:
+            # HIGH stress: erratic, often wanders even when hungry
             if wants_food and random.random() > STRESS_WANDER_CHANCE_HIGH:
                 target = self._find_nearest(foods)
                 if target is not None:
@@ -166,6 +193,7 @@ class Agent:
             self._apply_jitter(dt, STRESS_JITTER_HIGH)
 
         elif self.stress >= STRESS_THRESHOLD_MEDIUM:
+            # MEDIUM stress: slightly impaired
             if wants_food:
                 target = self._find_nearest(foods)
                 if target is not None:
@@ -177,6 +205,7 @@ class Agent:
             self._apply_jitter(dt, STRESS_JITTER_MEDIUM)
 
         else:
+            # LOW stress: normal behavior
             if wants_food:
                 target = self._find_nearest(foods)
                 if target is not None:
@@ -233,6 +262,10 @@ class Agent:
         max_spd = self.max_speed
         if self.hunger >= HUNGER_THRESHOLD:
             max_spd *= SEEK_SPEED_MULTIPLIER
+
+        # Behavioral sink speed penalty
+        if self.stress >= BEHAVIORAL_SINK_THRESHOLD:
+            max_spd *= SINK_SPEED_PENALTY
 
         speed_sq = self.vx * self.vx + self.vy * self.vy
         if speed_sq > max_spd * max_spd:

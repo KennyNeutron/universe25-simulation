@@ -53,6 +53,21 @@ CHILD_SPEED_VARIATION = 0.1        # ±10% speed variation for inheritance
 BIRTH_FLASH_DURATION = 0.3         # seconds the birth flash is visible
 BIRTH_FLASH_RADIUS = 8             # pixel radius of the flash circle
 
+# Death & lifespan
+AGENT_LIFESPAN = 120.0             # max age in seconds
+LIFESPAN_VARIATION = 0.2           # ±20% random variation per agent
+STARVATION_THRESHOLD = 95.0        # hunger above this → death
+DEATH_FLASH_DURATION = 0.4         # seconds the death flash is visible
+DEATH_FLASH_RADIUS = 10            # pixel radius of the death flash
+
+# Behavioral sink
+BEHAVIORAL_SINK_THRESHOLD = 85.0   # stress level for deep behavioral failure
+SINK_SEEK_CHANCE = 0.15            # probability of seeking food in sink state
+SINK_SPEED_PENALTY = 0.6           # max speed multiplier in sink state
+
+# Stress recovery
+STRESS_RECOVERY_DELAY = 2.0        # seconds of zero neighbors before stress decays
+
 # Colors (R, G, B)
 BACKGROUND_COLOR = (15, 15, 25)
 AGENT_COLOR = (100, 200, 255)

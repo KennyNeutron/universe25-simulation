@@ -12,19 +12,31 @@ from config import (
     MAX_POPULATION,
     REPRODUCTION_DENSITY_PENALTY,
     BASE_REPRODUCTION_CHANCE,
+    DEATH_FLASH_DURATION,
 )
 
 
+class DeathMarker:
+    """A brief visual marker at the location where an agent died."""
+    __slots__ = ("x", "y", "timer")
+
+    def __init__(self, x: float, y: float, duration: float):
+        self.x = x
+        self.y = y
+        self.timer = duration
+
+
 class Simulation:
-    """Manages agents, food, world zones, reproduction, and drives the loop."""
+    """Manages agents, food, world zones, reproduction, death, and drives the loop."""
 
     def __init__(self):
         self.world = World(ZONES)
         self.agents: list[Agent] = [Agent() for _ in range(AGENT_COUNT)]
         self.foods: list[Food] = [self._spawn_food() for _ in range(FOOD_COUNT)]
+        self.death_markers: list[DeathMarker] = []
 
     def update(self, dt: float) -> None:
-        """Update density, reproduction, agents, and handle eating / food respawn.
+        """Update density, reproduction, agents, eating, and death.
 
         Args:
             dt: Delta time in seconds since the last frame.
@@ -44,10 +56,31 @@ class Simulation:
                 self.foods.remove(eaten)
                 self.foods.append(self._spawn_food())
 
+        # ── Process deaths ────────────────────────────────────────────────
+        self._process_deaths()
+
+        # ── Update death markers ──────────────────────────────────────────
+        for marker in self.death_markers:
+            marker.timer -= dt
+        self.death_markers = [m for m in self.death_markers if m.timer > 0]
+
     def _spawn_food(self) -> Food:
         """Create a new food item at a random position in a feeding zone."""
         x, y = self.world.random_food_position()
         return Food(x, y)
+
+    def _process_deaths(self) -> None:
+        """Remove dead agents and create death markers."""
+        surviving = []
+        for agent in self.agents:
+            if agent.is_dead:
+                agent.alive = False
+                self.death_markers.append(
+                    DeathMarker(agent.x, agent.y, DEATH_FLASH_DURATION)
+                )
+            else:
+                surviving.append(agent)
+        self.agents = surviving
 
     def _compute_density_and_mates(self) -> list[tuple[Agent, Agent]]:
         """Count neighbors + collect eligible mating pairs in one O(n²) pass."""
@@ -57,7 +90,6 @@ class Simulation:
         mating_sq = MATING_RADIUS * MATING_RADIUS
         mating_pairs: list[tuple[Agent, Agent]] = []
 
-        # Reset counts
         for a in agents:
             a.neighbor_count = 0
 
@@ -73,7 +105,6 @@ class Simulation:
                     ai.neighbor_count += 1
                     aj.neighbor_count += 1
 
-                # Mating candidate check (tighter radius)
                 if (dist_sq <= mating_sq
                         and ai.gender != aj.gender
                         and ai.can_reproduce
@@ -91,11 +122,9 @@ class Simulation:
         random.shuffle(mating_pairs)
 
         for parent_a, parent_b in mating_pairs:
-            # Re-check eligibility (a parent may have been used this frame)
             if not (parent_a.can_reproduce and parent_b.can_reproduce):
                 continue
 
-            # Density penalty — average neighbor count of the pair
             avg_neighbors = (parent_a.neighbor_count + parent_b.neighbor_count) / 2
             chance = BASE_REPRODUCTION_CHANCE * dt * max(
                 0.0, 1.0 - avg_neighbors * REPRODUCTION_DENSITY_PENALTY
@@ -104,4 +133,4 @@ class Simulation:
             if random.random() < chance:
                 child = Agent.create_child(parent_a, parent_b)
                 self.agents.append(child)
-                break  # at most 1 birth per frame
+                break

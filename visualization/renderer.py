@@ -12,6 +12,8 @@ from config import (
     FEEDING_ZONE_COLOR,
     NESTING_ZONE_COLOR,
     BIRTH_FLASH_RADIUS,
+    DEATH_FLASH_RADIUS,
+    DEATH_FLASH_DURATION,
 )
 
 
@@ -106,13 +108,14 @@ class Renderer:
         self._food_half_w = FOOD_SPRITE_SIZE[0] // 2
         self._food_half_h = FOOD_SPRITE_SIZE[1] // 2
 
-    def render(self, agents, foods, world) -> None:
+    def render(self, agents, foods, world, death_markers=()) -> None:
         """Draw the current frame.
 
         Args:
             agents: Iterable of Agent objects to draw.
             foods: Iterable of Food objects to draw.
             world: World object containing zone definitions.
+            death_markers: Iterable of DeathMarker objects to draw.
         """
         self.screen.fill(BACKGROUND_COLOR)
 
@@ -157,6 +160,22 @@ class Renderer:
 
             rect = tinted.get_rect(center=(int(agent.x), int(agent.y)))
             self.screen.blit(tinted, rect)
+
+        # Draw death markers
+        for marker in death_markers:
+            alpha = int(180 * (marker.timer / DEATH_FLASH_DURATION))
+            death_surf = pygame.Surface(
+                (DEATH_FLASH_RADIUS * 2, DEATH_FLASH_RADIUS * 2), pygame.SRCALPHA
+            )
+            pygame.draw.circle(
+                death_surf, (255, 60, 60, alpha),
+                (DEATH_FLASH_RADIUS, DEATH_FLASH_RADIUS), DEATH_FLASH_RADIUS,
+            )
+            self.screen.blit(
+                death_surf,
+                (int(marker.x) - DEATH_FLASH_RADIUS,
+                 int(marker.y) - DEATH_FLASH_RADIUS),
+            )
 
         pygame.display.flip()
 
