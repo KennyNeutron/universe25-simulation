@@ -7,6 +7,8 @@ from config import (
     BACKGROUND_COLOR,
     AGENT_COLOR,
     AGENT_RADIUS,
+    FOOD_COLOR,
+    FOOD_RADIUS,
 )
 
 
@@ -18,14 +20,25 @@ class Renderer:
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption(WINDOW_TITLE)
 
-    def render(self, agents) -> None:
+    def render(self, agents, foods) -> None:
         """Draw the current frame.
 
         Args:
             agents: Iterable of Agent objects to draw.
+            foods: Iterable of Food objects to draw.
         """
         self.screen.fill(BACKGROUND_COLOR)
 
+        # Draw food first (underneath agents)
+        for food in foods:
+            pygame.draw.circle(
+                self.screen,
+                FOOD_COLOR,
+                (int(food.x), int(food.y)),
+                FOOD_RADIUS,
+            )
+
+        # Draw agents on top
         for agent in agents:
             pygame.draw.circle(
                 self.screen,

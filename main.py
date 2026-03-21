@@ -25,7 +25,7 @@ def main() -> None:
         simulation.update(dt)
 
         # ── Render ────────────────────────────────────────────────────────
-        renderer.render(simulation.agents)
+        renderer.render(simulation.agents, simulation.foods)
 
         # ── Tick ──────────────────────────────────────────────────────────
         clock.tick(FPS)
