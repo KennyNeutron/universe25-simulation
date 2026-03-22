@@ -23,13 +23,26 @@ class Zone:
         return rx, ry
 
 
-class World:
-    """Manages the structured environment (zones)."""
+class Wall:
+    """A solid rectangular obstacle."""
+    def __init__(self, x: float, y: float, width: float, height: float):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
 
-    def __init__(self, zone_defs: list[dict]):
+
+class World:
+    """Manages the structured environment (zones and walls)."""
+
+    def __init__(self, zone_defs: list[dict], wall_defs: list[dict]):
         self.zones: list[Zone] = [
             Zone(z["type"], z["x"], z["y"], z["width"], z["height"])
             for z in zone_defs
+        ]
+        self.walls: list[Wall] = [
+            Wall(w["x"], w["y"], w["width"], w["height"])
+            for w in wall_defs
         ]
 
     @property

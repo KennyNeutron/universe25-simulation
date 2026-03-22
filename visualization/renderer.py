@@ -11,6 +11,7 @@ from config import (
     FOOD_SPRITE_SIZE,
     FEEDING_ZONE_COLOR,
     NESTING_ZONE_COLOR,
+    WALL_COLOR,
     BIRTH_FLASH_RADIUS,
     DEATH_FLASH_RADIUS,
     DEATH_FLASH_DURATION,
@@ -123,8 +124,9 @@ class Renderer:
         """
         self.screen.fill(BACKGROUND_COLOR)
 
-        # Draw zone overlays
+        # Draw zone overlays and walls
         self._draw_zones(world)
+        self._draw_walls(world)
 
         # Draw food first (underneath agents)
         for food in foods:
@@ -208,6 +210,12 @@ class Renderer:
             overlay = pygame.Surface((zone.width, zone.height), pygame.SRCALPHA)
             overlay.fill((*color, 100))  # semi-transparent
             self.screen.blit(overlay, (zone.x, zone.y))
+
+    def _draw_walls(self, world) -> None:
+        """Draw solid wall obstacles."""
+        for wall in world.walls:
+            rect = (wall.x, wall.y, wall.width, wall.height)
+            pygame.draw.rect(self.screen, WALL_COLOR, rect)
 
     def close(self) -> None:
         """Shut down the Pygame display."""

@@ -9,6 +9,7 @@ from config import (
     FOOD_COUNT,
     DENSITY_RADIUS,
     ZONES,
+    WALLS,
     MATING_RADIUS,
     MAX_POPULATION,
     REPRODUCTION_DENSITY_PENALTY,
@@ -56,7 +57,7 @@ class Simulation:
     """Manages agents, food, zones, reproduction, death, interactions, and the loop."""
 
     def __init__(self):
-        self.world = World(ZONES)
+        self.world = World(ZONES, WALLS)
         self.agents: list[Agent] = [Agent() for _ in range(AGENT_COUNT)]
         self.foods: list[Food] = [self._spawn_food() for _ in range(FOOD_COUNT)]
         self.death_markers: list[DeathMarker] = []
@@ -76,6 +77,7 @@ class Simulation:
         # ── Update agents and handle eating ───────────────────────────────
         for agent in self.agents:
             agent.update(dt, self.foods)
+            self._resolve_wall_collisions(agent)
 
             eaten = agent.try_eat(self.foods)
             if eaten is not None:
@@ -98,6 +100,42 @@ class Simulation:
         """Create a new food item at a random position in a feeding zone."""
         x, y = self.world.random_food_position()
         return Food(x, y)
+
+    def _resolve_wall_collisions(self, agent: Agent) -> None:
+        """Prevent agents from passing through walls (AABB vs Circle)."""
+        from config import AGENT_RADIUS
+        import math
+        radius = AGENT_RADIUS
+        
+        for wall in self.world.walls:
+            # Find closest point on wall rect to agent center
+            test_x = max(wall.x, min(agent.x, wall.x + wall.width))
+            test_y = max(wall.y, min(agent.y, wall.y + wall.height))
+            
+            dist_x = agent.x - test_x
+            dist_y = agent.y - test_y
+            dist_sq = dist_x * dist_x + dist_y * dist_y
+            
+            if dist_sq < radius * radius:
+                dist = math.sqrt(dist_sq)
+                if dist == 0:
+                    agent.y -= radius
+                    agent.vy *= -1
+                    continue
+                    
+                overlap = radius - dist
+                nx = dist_x / dist
+                ny = dist_y / dist
+                
+                # Push out
+                agent.x += nx * overlap
+                agent.y += ny * overlap
+                
+                # Reflect velocity (slide/bounce with low elasticity)
+                dot = agent.vx * nx + agent.vy * ny
+                if dot < 0:
+                    agent.vx -= 1.2 * dot * nx
+                    agent.vy -= 1.2 * dot * ny
 
     def _process_deaths(self) -> None:
         """Remove dead agents and create death markers."""

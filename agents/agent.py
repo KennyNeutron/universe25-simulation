@@ -48,8 +48,8 @@ class Agent:
 
     def __init__(self, x: float = None, y: float = None, max_speed: float = None):
         # Position
-        self.x = x if x is not None else random.uniform(AGENT_RADIUS, WINDOW_WIDTH - AGENT_RADIUS)
-        self.y = y if y is not None else random.uniform(AGENT_RADIUS, WINDOW_HEIGHT - AGENT_RADIUS)
+        self.x = x if x is not None else random.uniform(100, WINDOW_WIDTH - 100)
+        self.y = y if y is not None else random.uniform(100, WINDOW_HEIGHT - 100)
 
         # Per-agent max speed (for inheritance)
         self.max_speed = max_speed if max_speed is not None else MAX_SPEED

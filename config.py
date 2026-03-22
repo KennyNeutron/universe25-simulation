@@ -91,6 +91,7 @@ NEGATIVE_CHANCE_HIGH = 0.7
 BACKGROUND_COLOR = (15, 15, 25)
 AGENT_COLOR = (100, 200, 255)
 FOOD_COLOR = (100, 220, 80)
+WALL_COLOR = (70, 70, 80)
 
 # Sprites
 MOUSE_SPRITE_PATH = "assets/mouse.png"
@@ -106,3 +107,26 @@ ZONES = [
 ]
 FEEDING_ZONE_COLOR = (30, 60, 30)    # dark green overlay
 NESTING_ZONE_COLOR = (40, 30, 50)    # dark purple overlay
+
+# Walls  (x, y, width, height)
+WALLS = [
+    # Feeding 1 (Left) Enclosure
+    {"x": 230, "y": 200, "width": 240, "height": 20},   # Top
+    {"x": 230, "y": 420, "width": 240, "height": 20},   # Bottom
+    {"x": 230, "y": 220, "width": 20, "height": 200},   # Left
+    {"x": 450, "y": 220, "width": 20, "height": 90},    # Right top
+    {"x": 450, "y": 330, "width": 20, "height": 90},    # Right bottom (20px gap)
+    
+    # Feeding 2 (Right) Enclosure
+    {"x": 810, "y": 200, "width": 240, "height": 20},   # Top
+    {"x": 810, "y": 420, "width": 240, "height": 20},   # Bottom
+    {"x": 1030, "y": 220, "width": 20, "height": 200},  # Right
+    {"x": 810, "y": 220, "width": 20, "height": 90},    # Left top
+    {"x": 810, "y": 330, "width": 20, "height": 90},    # Left bottom (20px gap)
+
+    # Perimeter padding (optional constraint near edges)
+    {"x": 40, "y": 40, "width": 1200, "height": 20},    # Top perimeter
+    {"x": 40, "y": 660, "width": 1200, "height": 20},   # Bottom perimeter
+    {"x": 40, "y": 60, "width": 20, "height": 600},     # Left perimeter
+    {"x": 1220, "y": 60, "width": 20, "height": 600},   # Right perimeter
+]
