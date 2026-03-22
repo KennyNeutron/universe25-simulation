@@ -35,11 +35,16 @@ from config import (
     SINK_SEEK_CHANCE,
     SINK_SPEED_PENALTY,
     STRESS_RECOVERY_DELAY,
+    INTERACTION_COOLDOWN,
+    INTERACTION_REPULSION,
+    AVOIDANCE_THRESHOLD,
+    AVOIDANCE_STRENGTH,
 )
 
 
 class Agent:
-    """A single autonomous agent with hunger, stress, reproduction, death, and degradation."""
+    """A single autonomous agent with hunger, stress, reproduction, death,
+    social interactions, and behavioral degradation."""
 
     def __init__(self, x: float = None, y: float = None, max_speed: float = None):
         # Position
@@ -61,7 +66,7 @@ class Agent:
         # Stress state
         self.stress = 0.0
         self.neighbor_count = 0  # set externally by Simulation
-        self.stress_recovery_timer = 0.0  # time since last neighbor interaction
+        self.stress_recovery_timer = 0.0
 
         # Identity & reproduction
         self.gender = random.choice(["male", "female"])
@@ -74,6 +79,10 @@ class Agent:
 
         # Death
         self.alive = True
+
+        # Social
+        self.interaction_cooldown = 0.0
+        self.nearby_agents: list["Agent"] = []  # set externally for avoidance
 
     @property
     def stress_ratio(self) -> float:
@@ -120,17 +129,29 @@ class Agent:
 
         return child
 
+    def apply_repulsion(self, other: "Agent") -> None:
+        """Push this agent's velocity away from another agent."""
+        dx = self.x - other.x
+        dy = self.y - other.y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist < 1e-6:
+            angle = random.uniform(0, 2 * math.pi)
+            dx, dy = math.cos(angle), math.sin(angle)
+            dist = 1.0
+        self.vx += (dx / dist) * INTERACTION_REPULSION
+        self.vy += (dy / dist) * INTERACTION_REPULSION
+
     def update(self, dt: float, foods: list) -> None:
         """Advance the agent by one time-step."""
         # ── Timers ────────────────────────────────────────────────────────
         self.age += dt
         self.reproduction_cooldown = max(0.0, self.reproduction_cooldown - dt)
+        self.interaction_cooldown = max(0.0, self.interaction_cooldown - dt)
         self.birth_flash = max(0.0, self.birth_flash - dt)
 
         # ── Stress accumulation / recovery ────────────────────────────────
         self.stress += self.neighbor_count * STRESS_PER_NEIGHBOR * dt
 
-        # Stress recovery delay: only decay after sustained isolation
         if self.neighbor_count == 0:
             self.stress_recovery_timer += dt
         else:
@@ -144,7 +165,7 @@ class Agent:
         # ── Hunger ────────────────────────────────────────────────────────
         self.hunger = min(self.hunger + HUNGER_RATE * dt, MAX_HUNGER)
 
-        # ── Behavior (4-tier stress degradation) ──────────────────────────
+        # ── Behavior (4-tier stress degradation + avoidance) ──────────────
         self._behave(dt, foods)
 
         self._clamp_speed()
@@ -168,6 +189,14 @@ class Agent:
         """Decide movement behavior based on hunger and stress level (4 tiers)."""
         wants_food = self.hunger >= HUNGER_THRESHOLD and foods
 
+        # Social avoidance: high-stress agents flee neighbors when not eating
+        if (self.stress >= AVOIDANCE_THRESHOLD
+                and self.nearby_agents
+                and not wants_food):
+            self._avoid_neighbors(dt)
+            self._apply_jitter(dt, STRESS_JITTER_HIGH)
+            return
+
         if self.stress >= BEHAVIORAL_SINK_THRESHOLD:
             # BEHAVIORAL SINK: agent nearly non-functional
             if wants_food and random.random() < SINK_SEEK_CHANCE:
@@ -177,11 +206,14 @@ class Agent:
                 else:
                     self._wander(dt)
             else:
-                self._wander(dt)
+                # Even when in sink, prefer avoidance if neighbors present
+                if self.nearby_agents:
+                    self._avoid_neighbors(dt)
+                else:
+                    self._wander(dt)
             self._apply_jitter(dt, STRESS_JITTER_HIGH)
 
         elif self.stress >= STRESS_THRESHOLD_HIGH:
-            # HIGH stress: erratic, often wanders even when hungry
             if wants_food and random.random() > STRESS_WANDER_CHANCE_HIGH:
                 target = self._find_nearest(foods)
                 if target is not None:
@@ -193,7 +225,6 @@ class Agent:
             self._apply_jitter(dt, STRESS_JITTER_HIGH)
 
         elif self.stress >= STRESS_THRESHOLD_MEDIUM:
-            # MEDIUM stress: slightly impaired
             if wants_food:
                 target = self._find_nearest(foods)
                 if target is not None:
@@ -205,7 +236,6 @@ class Agent:
             self._apply_jitter(dt, STRESS_JITTER_MEDIUM)
 
         else:
-            # LOW stress: normal behavior
             if wants_food:
                 target = self._find_nearest(foods)
                 if target is not None:
@@ -214,6 +244,25 @@ class Agent:
                     self._wander(dt)
             else:
                 self._wander(dt)
+
+    def _avoid_neighbors(self, dt: float) -> None:
+        """Steer away from the center of nearby agents (social avoidance)."""
+        if not self.nearby_agents:
+            return
+        avg_x = sum(a.x for a in self.nearby_agents) / len(self.nearby_agents)
+        avg_y = sum(a.y for a in self.nearby_agents) / len(self.nearby_agents)
+        dx = self.x - avg_x
+        dy = self.y - avg_y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist < 1e-6:
+            angle = random.uniform(0, 2 * math.pi)
+            dx, dy = math.cos(angle), math.sin(angle)
+            dist = 1.0
+        flee_speed = self.max_speed
+        desired_vx = (dx / dist) * flee_speed
+        desired_vy = (dy / dist) * flee_speed
+        self.vx += (desired_vx - self.vx) * AVOIDANCE_STRENGTH * dt
+        self.vy += (desired_vy - self.vy) * AVOIDANCE_STRENGTH * dt
 
     def _find_nearest(self, foods: list):
         """Return the nearest food item via linear distance scan."""
@@ -263,7 +312,6 @@ class Agent:
         if self.hunger >= HUNGER_THRESHOLD:
             max_spd *= SEEK_SPEED_MULTIPLIER
 
-        # Behavioral sink speed penalty
         if self.stress >= BEHAVIORAL_SINK_THRESHOLD:
             max_spd *= SINK_SPEED_PENALTY
 

@@ -68,6 +68,25 @@ SINK_SPEED_PENALTY = 0.6           # max speed multiplier in sink state
 # Stress recovery
 STRESS_RECOVERY_DELAY = 2.0        # seconds of zero neighbors before stress decays
 
+# Social interactions
+INTERACTION_RADIUS = 20.0          # proximity for social interactions (pixels)
+INTERACTION_COOLDOWN = 2.0         # seconds between interactions per agent
+INTERACTION_STRESS_POSITIVE = -3.0 # stress change from positive outcome
+INTERACTION_STRESS_NEGATIVE = 6.0  # stress gain from rejection/conflict
+INTERACTION_REPULSION = 150.0      # velocity impulse on rejection (pixels/s)
+AVOIDANCE_THRESHOLD = 70.0         # stress above which agents flee neighbors
+AVOIDANCE_STRENGTH = 3.0           # steering multiplier for avoidance
+INTERACTION_FLASH_DURATION = 0.2   # seconds the interaction flash is visible
+INTERACTION_FLASH_RADIUS = 6       # pixel radius of the flash
+
+# Interaction outcome probabilities by stress tier
+POSITIVE_CHANCE_LOW = 0.4
+NEGATIVE_CHANCE_LOW = 0.1
+POSITIVE_CHANCE_MED = 0.15
+NEGATIVE_CHANCE_MED = 0.4
+POSITIVE_CHANCE_HIGH = 0.05
+NEGATIVE_CHANCE_HIGH = 0.7
+
 # Colors (R, G, B)
 BACKGROUND_COLOR = (15, 15, 25)
 AGENT_COLOR = (100, 200, 255)

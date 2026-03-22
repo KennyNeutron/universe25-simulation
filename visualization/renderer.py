@@ -14,6 +14,8 @@ from config import (
     BIRTH_FLASH_RADIUS,
     DEATH_FLASH_RADIUS,
     DEATH_FLASH_DURATION,
+    INTERACTION_FLASH_RADIUS,
+    INTERACTION_FLASH_DURATION,
 )
 
 
@@ -108,7 +110,8 @@ class Renderer:
         self._food_half_w = FOOD_SPRITE_SIZE[0] // 2
         self._food_half_h = FOOD_SPRITE_SIZE[1] // 2
 
-    def render(self, agents, foods, world, death_markers=()) -> None:
+    def render(self, agents, foods, world, death_markers=(),
+               interaction_flashes=()) -> None:
         """Draw the current frame.
 
         Args:
@@ -116,6 +119,7 @@ class Renderer:
             foods: Iterable of Food objects to draw.
             world: World object containing zone definitions.
             death_markers: Iterable of DeathMarker objects to draw.
+            interaction_flashes: Iterable of InteractionFlash objects to draw.
         """
         self.screen.fill(BACKGROUND_COLOR)
 
@@ -175,6 +179,18 @@ class Renderer:
                 death_surf,
                 (int(marker.x) - DEATH_FLASH_RADIUS,
                  int(marker.y) - DEATH_FLASH_RADIUS),
+            )
+
+        # Draw interaction flashes
+        for flash in interaction_flashes:
+            alpha = int(160 * (flash.timer / INTERACTION_FLASH_DURATION))
+            r = INTERACTION_FLASH_RADIUS
+            flash_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(
+                flash_surf, (*flash.color, alpha), (r, r), r,
+            )
+            self.screen.blit(
+                flash_surf, (int(flash.x) - r, int(flash.y) - r),
             )
 
         pygame.display.flip()

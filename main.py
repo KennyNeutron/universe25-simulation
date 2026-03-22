@@ -26,7 +26,8 @@ def main() -> None:
 
         # ── Render ────────────────────────────────────────────────────────
         renderer.render(simulation.agents, simulation.foods,
-                        simulation.world, simulation.death_markers)
+                        simulation.world, simulation.death_markers,
+                        simulation.interaction_flashes)
 
         # ── Tick ──────────────────────────────────────────────────────────
         clock.tick(FPS)
