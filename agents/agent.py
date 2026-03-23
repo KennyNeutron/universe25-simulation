@@ -94,18 +94,18 @@ class Agent:
         """Check if this agent should die this frame."""
         return self.hunger >= STARVATION_THRESHOLD or self.age >= self.lifespan
 
-    @property
-    def can_reproduce(self) -> bool:
+    def can_reproduce(self, current_stress_max: float) -> bool:
         """Check if this agent is eligible to reproduce right now."""
+        from config import REPRODUCTION_HUNGER_MAX
         return (
             self.alive
             and self.reproduction_cooldown <= 0
-            and self.stress < REPRODUCTION_STRESS_MAX
+            and self.stress < current_stress_max
             and self.hunger < REPRODUCTION_HUNGER_MAX
         )
 
     @classmethod
-    def create_child(cls, parent_a: "Agent", parent_b: "Agent") -> "Agent":
+    def create_child(cls, parent_a: "Agent", parent_b: "Agent", start_cooldown: float) -> "Agent":
         """Spawn a child near the midpoint of two parents with inherited traits."""
         mx = (parent_a.x + parent_b.x) / 2 + random.uniform(-10, 10)
         my = (parent_a.y + parent_b.y) / 2 + random.uniform(-10, 10)
@@ -121,11 +121,11 @@ class Agent:
         child.hunger = 0.0
         child.stress = 0.0
         child.age = 0.0
-        child.reproduction_cooldown = REPRODUCTION_COOLDOWN
+        child.reproduction_cooldown = start_cooldown
         child.birth_flash = BIRTH_FLASH_DURATION
 
-        parent_a.reproduction_cooldown = REPRODUCTION_COOLDOWN
-        parent_b.reproduction_cooldown = REPRODUCTION_COOLDOWN
+        parent_a.reproduction_cooldown = start_cooldown
+        parent_b.reproduction_cooldown = start_cooldown
 
         return child
 
@@ -141,7 +141,7 @@ class Agent:
         self.vx += (dx / dist) * INTERACTION_REPULSION
         self.vy += (dy / dist) * INTERACTION_REPULSION
 
-    def update(self, dt: float, foods: list) -> None:
+    def update(self, dt: float, foods: list, stress_multiplier: float = 1.0) -> None:
         """Advance the agent by one time-step."""
         # ── Timers ────────────────────────────────────────────────────────
         self.age += dt
@@ -150,7 +150,7 @@ class Agent:
         self.birth_flash = max(0.0, self.birth_flash - dt)
 
         # ── Stress accumulation / recovery ────────────────────────────────
-        self.stress += self.neighbor_count * STRESS_PER_NEIGHBOR * dt
+        self.stress += self.neighbor_count * STRESS_PER_NEIGHBOR * dt * stress_multiplier
 
         if self.neighbor_count == 0:
             self.stress_recovery_timer += dt
@@ -244,6 +244,8 @@ class Agent:
                     self._wander(dt)
             else:
                 self._wander(dt)
+            # Add a baseline jitter even when low stress to prevent perfectly flat wall gliding
+            self._apply_jitter(dt, 0.1)
 
     def _avoid_neighbors(self, dt: float) -> None:
         """Steer away from the center of nearby agents (social avoidance)."""
@@ -292,6 +294,12 @@ class Agent:
         steer_strength = 5.0 * efficiency
         self.vx += (desired_vx - self.vx) * steer_strength * dt
         self.vy += (desired_vy - self.vy) * steer_strength * dt
+
+        # Scurry: Add chaotic noise to base seek to prevent getting stuck on perfectly flat walls
+        angle = random.uniform(0, 2 * math.pi)
+        scurry_strength = WANDER_STRENGTH * 0.8  # 80% wander strength
+        self.vx += math.cos(angle) * scurry_strength * dt
+        self.vy += math.sin(angle) * scurry_strength * dt
 
     def _wander(self, dt: float) -> None:
         """Apply a small random acceleration to create wandering behavior."""

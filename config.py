@@ -7,7 +7,7 @@ WINDOW_TITLE = "Universe 25 Simulation"
 FPS = 60
 
 # Agents
-AGENT_COUNT = 150
+AGENT_COUNT = 8
 AGENT_RADIUS = 4
 MAX_SPEED = 120.0          # pixels per second
 WANDER_STRENGTH = 200.0    # random acceleration magnitude (pixels/s²)
@@ -20,7 +20,7 @@ HUNGER_RESTORE = 60.0          # hunger reduction when eating
 SEEK_SPEED_MULTIPLIER = 1.3    # speed boost when seeking food
 
 # Food
-FOOD_COUNT = 75
+FOOD_COUNT = 100
 FOOD_RADIUS = 3
 EAT_DISTANCE = 10.0           # proximity required to consume food
 
@@ -28,7 +28,7 @@ EAT_DISTANCE = 10.0           # proximity required to consume food
 MAX_STRESS = 100.0
 STRESS_DECAY_RATE = 3.0        # natural stress reduction per second
 DENSITY_RADIUS = 50.0          # neighbor detection radius (pixels)
-STRESS_PER_NEIGHBOR = 4.0      # stress gain per nearby agent per second
+STRESS_PER_NEIGHBOR = 0.5      # stress gain per nearby agent per second
 
 # Stress thresholds
 STRESS_THRESHOLD_MEDIUM = 35.0
@@ -42,19 +42,19 @@ STRESS_SEEK_PENALTY_HIGH = 0.3     # steer strength multiplier at high stress
 STRESS_WANDER_CHANCE_HIGH = 0.4    # chance of wandering instead of seeking at high stress
 
 # Reproduction
-MATING_RADIUS = 15.0               # max distance for mating (pixels)
-REPRODUCTION_COOLDOWN = 15.0       # seconds before agent can reproduce again
+MATING_RADIUS = 100.0              # max distance for mating (pixels)
+REPRODUCTION_COOLDOWN = 5.0        # seconds before agent can reproduce again
 REPRODUCTION_STRESS_MAX = 60.0     # stress must be below this to reproduce
 REPRODUCTION_HUNGER_MAX = 40.0     # hunger must be below this to reproduce
-MAX_POPULATION = 400               # hard cap on total agents
-REPRODUCTION_DENSITY_PENALTY = 0.1 # per-neighbor reduction in reproduction chance
-BASE_REPRODUCTION_CHANCE = 0.3     # base probability per eligible pair per second
+MAX_POPULATION = 2200              # hard cap on total agents
+REPRODUCTION_DENSITY_PENALTY = 0.01 # per-neighbor reduction in reproduction chance
+BASE_REPRODUCTION_CHANCE = 1.5     # base probability per eligible pair per second
 CHILD_SPEED_VARIATION = 0.1        # ±10% speed variation for inheritance
 BIRTH_FLASH_DURATION = 0.3         # seconds the birth flash is visible
 BIRTH_FLASH_RADIUS = 8             # pixel radius of the flash circle
 
 # Death & lifespan
-AGENT_LIFESPAN = 120.0             # max age in seconds
+AGENT_LIFESPAN = 1200.0            # max age in seconds (20 minutes)
 LIFESPAN_VARIATION = 0.2           # ±20% random variation per agent
 STARVATION_THRESHOLD = 95.0        # hunger above this → death
 DEATH_FLASH_DURATION = 0.4         # seconds the death flash is visible
@@ -87,6 +87,13 @@ NEGATIVE_CHANCE_MED = 0.4
 POSITIVE_CHANCE_HIGH = 0.05
 NEGATIVE_CHANCE_HIGH = 0.7
 
+# Growth Phase Balancing
+EARLY_PHASE_DURATION = 180.0       # time in seconds
+EARLY_STRESS_MULTIPLIER = 0.0      # stress accumulation is 0% initially
+EARLY_REPRODUCTION_STRESS_MAX = 95.0 # much easier to reproduce initially
+EARLY_REPRODUCTION_COOLDOWN = 2.0  # faster breeding cycle
+LOG_INTERVAL = 10.0                # print stats every 10 seconds
+
 # Colors (R, G, B)
 BACKGROUND_COLOR = (15, 15, 25)
 AGENT_COLOR = (100, 200, 255)
@@ -110,23 +117,18 @@ NESTING_ZONE_COLOR = (40, 30, 50)    # dark purple overlay
 
 # Walls  (x, y, width, height)
 WALLS = [
-    # Feeding 1 (Left) Enclosure
-    {"x": 230, "y": 200, "width": 240, "height": 20},   # Top
-    {"x": 230, "y": 420, "width": 240, "height": 20},   # Bottom
-    {"x": 230, "y": 220, "width": 20, "height": 200},   # Left
-    {"x": 450, "y": 220, "width": 20, "height": 90},    # Right top
-    {"x": 450, "y": 330, "width": 20, "height": 90},    # Right bottom (20px gap)
-    
-    # Feeding 2 (Right) Enclosure
-    {"x": 810, "y": 200, "width": 240, "height": 20},   # Top
-    {"x": 810, "y": 420, "width": 240, "height": 20},   # Bottom
-    {"x": 1030, "y": 220, "width": 20, "height": 200},  # Right
-    {"x": 810, "y": 220, "width": 20, "height": 90},    # Left top
-    {"x": 810, "y": 330, "width": 20, "height": 90},    # Left bottom (20px gap)
+    # Top/Bottom/Left/Right outer boundaries
+    {"x": 0, "y": 0, "width": WINDOW_WIDTH, "height": 20},
+    {"x": 0, "y": WINDOW_HEIGHT - 20, "width": WINDOW_WIDTH, "height": 20},
+    {"x": 0, "y": 0, "width": 20, "height": WINDOW_HEIGHT},
+    {"x": WINDOW_WIDTH - 20, "y": 0, "width": 20, "height": WINDOW_HEIGHT},
 
-    # Perimeter padding (optional constraint near edges)
-    {"x": 40, "y": 40, "width": 1200, "height": 20},    # Top perimeter
-    {"x": 40, "y": 660, "width": 1200, "height": 20},   # Bottom perimeter
-    {"x": 40, "y": 60, "width": 20, "height": 600},     # Left perimeter
-    {"x": 1220, "y": 60, "width": 20, "height": 600},   # Right perimeter
+    # Pillars creating bottlenecks but easy to slide around natively
+    {"x": 460, "y": 200, "width": 40, "height": 40},
+    {"x": 460, "y": 350, "width": 40, "height": 40},
+    {"x": 460, "y": 500, "width": 40, "height": 40},
+
+    {"x": 780, "y": 200, "width": 40, "height": 40},
+    {"x": 780, "y": 350, "width": 40, "height": 40},
+    {"x": 780, "y": 500, "width": 40, "height": 40},
 ]

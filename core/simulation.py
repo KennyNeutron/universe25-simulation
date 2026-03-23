@@ -29,6 +29,15 @@ from config import (
     NEGATIVE_CHANCE_MED,
     POSITIVE_CHANCE_HIGH,
     NEGATIVE_CHANCE_HIGH,
+    WINDOW_WIDTH,
+    WINDOW_HEIGHT,
+    EARLY_PHASE_DURATION,
+    EARLY_STRESS_MULTIPLIER,
+    EARLY_REPRODUCTION_STRESS_MAX,
+    REPRODUCTION_STRESS_MAX,
+    EARLY_REPRODUCTION_COOLDOWN,
+    REPRODUCTION_COOLDOWN,
+    LOG_INTERVAL,
 )
 
 
@@ -58,25 +67,68 @@ class Simulation:
 
     def __init__(self):
         self.world = World(ZONES, WALLS)
-        self.agents: list[Agent] = [Agent() for _ in range(AGENT_COUNT)]
+        
+        # 8 original founders (Adam and Eves)
+        self.agents: list[Agent] = []
+        # 4 tightly clustered in Left Feeding Zone
+        for _ in range(2):
+            a1 = Agent(x=350 + random.uniform(-5, 5), y=320 + random.uniform(-5, 5))
+            a1.gender = "male"
+            self.agents.append(a1)
+            a2 = Agent(x=350 + random.uniform(-5, 5), y=320 + random.uniform(-5, 5))
+            a2.gender = "female"
+            self.agents.append(a2)
+        # 4 tightly clustered in Right Feeding Zone
+        for _ in range(2):
+            a3 = Agent(x=930 + random.uniform(-5, 5), y=320 + random.uniform(-5, 5))
+            a3.gender = "male"
+            self.agents.append(a3)
+            a4 = Agent(x=930 + random.uniform(-5, 5), y=320 + random.uniform(-5, 5))
+            a4.gender = "female"
+            self.agents.append(a4)
+
         self.foods: list[Food] = [self._spawn_food() for _ in range(FOOD_COUNT)]
         self.death_markers: list[DeathMarker] = []
         self.interaction_flashes: list[InteractionFlash] = []
 
+        # Lifecycle logging
+        self.sim_time = 0.0
+        self.log_timer = 0.0
+        self.births_this_interval = 0
+        self.deaths_this_interval = 0
+
     def update(self, dt: float) -> None:
         """Full simulation step: density, interactions, reproduction, agents, death."""
+        self.sim_time += dt
+        self.log_timer += dt
+        
+        phase_progress = min(1.0, self.sim_time / EARLY_PHASE_DURATION)
+        
+        # Lerp phase multipliers
+        stress_mult = EARLY_STRESS_MULTIPLIER + (1.0 - EARLY_STRESS_MULTIPLIER) * phase_progress
+        current_repro_stress_max = EARLY_REPRODUCTION_STRESS_MAX + (REPRODUCTION_STRESS_MAX - EARLY_REPRODUCTION_STRESS_MAX) * phase_progress
+        current_repro_cooldown = EARLY_REPRODUCTION_COOLDOWN + (REPRODUCTION_COOLDOWN - EARLY_REPRODUCTION_COOLDOWN) * phase_progress
+
+        if self.log_timer >= LOG_INTERVAL:
+            print(f"[Time: {self.sim_time:5.1f}s] Pop: {len(self.agents):<4} | "
+                  f"Births: {self.births_this_interval:<3} | Deaths: {self.deaths_this_interval:<3} | "
+                  f"Phase: {phase_progress:.0%}")
+            self.log_timer -= LOG_INTERVAL
+            self.births_this_interval = 0
+            self.deaths_this_interval = 0
+
         # ── Compute density, mating candidates, interaction candidates ────
-        mating_pairs, interaction_pairs = self._compute_density_mates_interactions()
+        mating_pairs, interaction_pairs = self._compute_density_mates_interactions(current_repro_stress_max)
 
         # ── Process social interactions ───────────────────────────────────
-        self._process_interactions(interaction_pairs)
+        self._process_interactions(interaction_pairs, stress_mult)
 
         # ── Reproduction ──────────────────────────────────────────────────
-        self._process_reproduction(dt, mating_pairs)
+        self._process_reproduction(dt, mating_pairs, current_repro_cooldown)
 
         # ── Update agents and handle eating ───────────────────────────────
         for agent in self.agents:
-            agent.update(dt, self.foods)
+            agent.update(dt, self.foods, stress_mult)
             self._resolve_wall_collisions(agent)
 
             eaten = agent.try_eat(self.foods)
@@ -142,15 +194,17 @@ class Simulation:
         surviving = []
         for agent in self.agents:
             if agent.is_dead:
+                print(f"[DEATH] age={agent.age:.1f}, hunger={agent.hunger:.1f}, pos={agent.x:.1f},{agent.y:.1f}, stress={agent.stress:.1f}")
                 agent.alive = False
                 self.death_markers.append(
                     DeathMarker(agent.x, agent.y, DEATH_FLASH_DURATION)
                 )
+                self.deaths_this_interval += 1
             else:
                 surviving.append(agent)
         self.agents = surviving
 
-    def _compute_density_mates_interactions(self):
+    def _compute_density_mates_interactions(self, current_repro_stress_max: float):
         """One O(n²) pass: density counts, mating pairs, interaction pairs,
         and nearby-agent lists for avoidance."""
         agents = self.agents
@@ -182,8 +236,8 @@ class Simulation:
 
                 if (dist_sq <= mating_sq
                         and ai.gender != aj.gender
-                        and ai.can_reproduce
-                        and aj.can_reproduce):
+                        and ai.can_reproduce(current_repro_stress_max)
+                        and aj.can_reproduce(current_repro_stress_max)):
                     mating_pairs.append((ai, aj))
 
                 if (dist_sq <= interact_sq
@@ -193,7 +247,7 @@ class Simulation:
 
         return mating_pairs, interaction_pairs
 
-    def _process_interactions(self, pairs: list[tuple[Agent, Agent]]) -> None:
+    def _process_interactions(self, pairs: list[tuple[Agent, Agent]], stress_mult: float) -> None:
         """Resolve social interactions and apply stress/repulsion outcomes."""
         random.shuffle(pairs)
         processed = set()  # avoid double-interaction per frame
@@ -227,8 +281,9 @@ class Simulation:
                 )
             elif roll < pos_chance + neg_chance:
                 # Negative interaction — stress gain + repulsion
-                a.stress = min(MAX_STRESS, a.stress + INTERACTION_STRESS_NEGATIVE)
-                b.stress = min(MAX_STRESS, b.stress + INTERACTION_STRESS_NEGATIVE)
+                negative_impact = INTERACTION_STRESS_NEGATIVE * stress_mult
+                a.stress = min(MAX_STRESS, a.stress + negative_impact)
+                b.stress = min(MAX_STRESS, b.stress + negative_impact)
                 a.apply_repulsion(b)
                 b.apply_repulsion(a)
                 self.interaction_flashes.append(
@@ -242,7 +297,8 @@ class Simulation:
             processed.add(id(b))
 
     def _process_reproduction(self, dt: float,
-                              mating_pairs: list[tuple[Agent, Agent]]) -> None:
+                              mating_pairs: list[tuple[Agent, Agent]],
+                              current_repro_cooldown: float) -> None:
         """Attempt reproduction for eligible pairs (at most 1 birth per frame)."""
         if len(self.agents) >= MAX_POPULATION:
             return
@@ -260,6 +316,7 @@ class Simulation:
             )
 
             if random.random() < chance:
-                child = Agent.create_child(parent_a, parent_b)
+                child = Agent.create_child(parent_a, parent_b, current_repro_cooldown)
                 self.agents.append(child)
+                self.births_this_interval += 1
                 break

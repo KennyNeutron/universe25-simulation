@@ -111,6 +111,8 @@ class Renderer:
         self._food_half_w = FOOD_SPRITE_SIZE[0] // 2
         self._food_half_h = FOOD_SPRITE_SIZE[1] // 2
 
+        self.font = pygame.font.SysFont(None, 24)
+
     def render(self, agents, foods, world, death_markers=(),
                interaction_flashes=()) -> None:
         """Draw the current frame.
@@ -157,11 +159,25 @@ class Renderer:
             angle = math.degrees(math.atan2(-agent.vy, agent.vx))
             rotated = pygame.transform.rotate(self.mouse_sprite, angle)
 
-            # Apply stress tint
-            tint = _stress_tint(agent.stress_ratio)
+            # Determine gender tint
+            if getattr(agent, "gender", "female") == "male":
+                gt = (220, 230, 255)  # Subtle blue
+            else:
+                gt = (255, 220, 230)  # Subtle pink
+
+            # Get stress tint
+            st = _stress_tint(agent.stress_ratio)
+
+            # Combine tints using integer multiplication
+            combined_tint = (
+                int(gt[0] * st[0] / 255),
+                int(gt[1] * st[1] / 255),
+                int(gt[2] * st[2] / 255)
+            )
+
             tinted = rotated.copy()
             tint_overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
-            tint_overlay.fill((*tint, 255))
+            tint_overlay.fill((*combined_tint, 255))
             tinted.blit(tint_overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
 
             rect = tinted.get_rect(center=(int(agent.x), int(agent.y)))
@@ -194,6 +210,24 @@ class Renderer:
             self.screen.blit(
                 flash_surf, (int(flash.x) - r, int(flash.y) - r),
             )
+
+        # Draw population stats UI
+        total = len(agents)
+        males = sum(1 for a in agents if getattr(a, "gender", "female") == "male")
+        females = total - males
+
+        stats = [
+            f"Total Population: {total}",
+            f"Males: {males}",
+            f"Females: {females}",
+        ]
+
+        for i, text in enumerate(stats):
+            # Using light gray with a simple drop shadow for readability
+            shadow_surf = self.font.render(text, True, (20, 20, 20))
+            text_surf = self.font.render(text, True, (220, 220, 220))
+            self.screen.blit(shadow_surf, (16, 16 + i * 24))
+            self.screen.blit(text_surf, (15, 15 + i * 24))
 
         pygame.display.flip()
 
